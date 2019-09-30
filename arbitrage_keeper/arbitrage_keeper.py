@@ -26,6 +26,7 @@ from web3 import Web3, HTTPProvider
 from arbitrage_keeper.conversion import Conversion, OasisTakeConversion, ZrxFillOrderConversion
 from arbitrage_keeper.conversion import TubBoomConversion, TubBustConversion, TubExitConversion, TubJoinConversion
 from arbitrage_keeper.opportunity import OpportunityFinder, Sequence
+from arbitrage_keeper.oasis_api import OasisAPI
 from arbitrage_keeper.transfer_formatter import TransferFormatter
 from pymaker import Address
 from pymaker.approval import via_tx_manager, directly
@@ -40,13 +41,13 @@ from pymaker.transactional import TxManager
 from pymaker.zrx import ZrxExchange, ZrxRelayerApi
 
 
-class ArbitrageKeeper:
-    """Keeper to arbitrage on OasisDEX, `join`, `exit`, `boom` and `bust`."""
+class SimpleArbitrageKeeper:
+    """Keeper to arbitrage on OasisDEX and Uniswap"""
 
-    logger = logging.getLogger('arbitrage-keeper')
+    logger = logging.getLogger('simple-arbitrage-keeper')
 
     def __init__(self, args, **kwargs):
-        parser = argparse.ArgumentParser("arbitrage-keeper")
+        parser = argparse.ArgumentParser("simple-arbitrage-keeper")
 
         parser.add_argument("--rpc-host", type=str, default="localhost",
                             help="JSON-RPC host (default: `localhost')")
@@ -63,14 +64,8 @@ class ArbitrageKeeper:
         parser.add_argument("--eth-key", type=str, nargs='*',
                             help="Ethereum private key(s) to use (e.g. 'key_file=aaa.json,pass_file=aaa.pass')")
 
-        parser.add_argument("--tub-address", type=str, required=True,
-                            help="Ethereum address of the Tub contract")
-
-        parser.add_argument("--tap-address", type=str, required=True,
-                            help="Ethereum address of the Tap contract")
-
-        parser.add_argument("--exchange-address", type=str,
-                            help="Ethereum address of the 0x Exchange contract")
+        parser.add_argument("--uniswap-address", type=str,
+                            help="Ethereum address of the Uniswap Exchange contract")
 
         parser.add_argument("--oasis-address", type=str, required=True,
                             help="Ethereum address of the OasisDEX contract")
@@ -78,8 +73,8 @@ class ArbitrageKeeper:
         parser.add_argument("--oasis-support-address", type=str, required=False,
                             help="Ethereum address of the OasisDEX support contract")
 
-        parser.add_argument("--relayer-api-server", type=str,
-                            help="Address of the 0x Relayer API")
+        parser.add_argument("--oasis-api-server", type=str, required=True,
+                            help="Address of the Oasis V2 REST API")
 
         parser.add_argument("--relayer-per-page", type=int, default=100,
                             help="Number of orders to fetch per one page from the 0x Relayer API (default: 100)")
@@ -90,8 +85,11 @@ class ArbitrageKeeper:
         parser.add_argument("--gas-price", type=int, default=0,
                             help="Gas price in Wei (default: node default)")
 
-        parser.add_argument("--base-token", type=str, required=True,
-                            help="The token all arbitrage sequences will start and end with")
+        parser.add_argument("--arb-token", type=str, required=True,
+                            help="The token address that arbitraged between both exchanges")
+
+        parser.add_argument("--arb-token-name", type=str, required=True,
+                            help="The token name (WETH or MKR) that arbitraged between both exchanges")
 
         parser.add_argument("--min-profit", type=float, required=True,
                             help="Minimum profit (in base token) from one arbitrage operation")
@@ -113,23 +111,29 @@ class ArbitrageKeeper:
         register_keys(self.web3, self.arguments.eth_key)
         self.our_address = Address(self.arguments.eth_from)
 
-        self.tub = Tub(web3=self.web3, address=Address(self.arguments.tub_address))
-        self.tap = Tap(web3=self.web3, address=Address(self.arguments.tap_address))
-        self.gem = ERC20Token(web3=self.web3, address=self.tub.gem())
-        self.sai = ERC20Token(web3=self.web3, address=self.tub.sai())
-        self.skr = ERC20Token(web3=self.web3, address=self.tub.skr())
 
-        self.zrx_exchange = ZrxExchange(web3=self.web3, address=Address(self.arguments.exchange_address)) \
+
+        ##TODO replace with Uniswap
+        self.uniswap_exchange = Uniswap(web3=self.web3, address=Address(self.arguments.exchange_address)) \
             if self.arguments.exchange_address is not None else None
-        self.zrx_relayer_api = ZrxRelayerApi(exchange=self.zrx_exchange, api_server=self.arguments.relayer_api_server) \
-            if self.arguments.relayer_api_server is not None else None
 
-        self.otc = MatchingMarket(web3=self.web3,
+
+        self.oasis_relayer_api = OasisAPI(self, api_server=self.arguments.oasis_api_server) \
+            if self.arguments.oasis_api_server is not None else None
+
+        self.oasis = MatchingMarket(web3=self.web3,
                                   address=Address(self.arguments.oasis_address),
                                   support_address=Address(self.arguments.oasis_support_address)
                                     if self.arguments.oasis_support_address is not None else None)
 
-        self.base_token = ERC20Token(web3=self.web3, address=Address(self.arguments.base_token))
+
+        self.sai = ERC20Token(web3=self.web3, address=Address('0xC4375B7De8af5a38a93548eb8453a498222C4fF2')) #SAI
+        self.sai_name = "DAI"
+        self.arb_token = ERC20Token(web3=self.web3, address=Address(self.arguments.arb_token)) #WETH, MKR, or other
+        self.arb_token_name = self.arguments.arb_token_name \
+            if self.arguments.arb_token_name != 'WETH' else 'ETH'
+
+
         self.min_profit = Wad.from_number(self.arguments.min_profit)
         self.max_engagement = Wad.from_number(self.arguments.max_engagement)
         self.max_errors = self.arguments.max_errors
@@ -158,66 +162,64 @@ class ArbitrageKeeper:
         """Approve all components that need to access our balances"""
         approval_method = via_tx_manager(self.tx_manager, gas_price=self.gas_price()) if self.tx_manager \
             else directly(gas_price=self.gas_price())
-        self.tub.approve(approval_method)
-        self.tap.approve(approval_method)
-        self.otc.approve([self.gem, self.sai, self.skr], approval_method)
-        if self.zrx_exchange:
-            self.zrx_exchange.approve([self.gem, self.sai], approval_method)
+
+        self.oasis.approve([self.gem, self.sai, self.skr], approval_method)
+
+        if self.uniswap_exchange:
+            self.uniswap_exchange.approve([self.sai, self.arb_token], approval_method)
         if self.tx_manager:
-            self.tx_manager.approve([self.gem, self.sai, self.skr], directly(gas_price=self.gas_price()))
+            self.tx_manager.approve([self.sai, self.arb_token], directly(gas_price=self.gas_price()))
 
-    def token_name(self, address: Address) -> str:
-        if address == self.sai.address:
-            return "DAI"
 
-        elif address == self.gem.address:
-            return "WETH"
-
-        elif address == self.skr.address:
-            return "PETH"
-
-        else:
-            return str(address)
-
-    def tub_conversions(self) -> List[Conversion]:
-        return [TubJoinConversion(self.tub),
-                TubExitConversion(self.tub),
-                TubBoomConversion(self.tub, self.tap),
-                TubBustConversion(self.tub, self.tap)]
-
-    def otc_orders(self, tokens):
+    def oasis_orders(self, tokens):
         orders = []
 
         for token1 in tokens:
             for token2 in tokens:
                 if token1 != token2:
-                    orders = orders + self.otc.get_orders(token1, token2)
+                    orders = orders + self.oasis.get_orders(token1, token2)
 
         return orders
 
-    def otc_conversions(self, tokens) -> List[Conversion]:
-        return list(map(lambda order: OasisTakeConversion(self.otc, order), self.otc_orders(tokens)))
+    def oasis_conversions(self, tokens) -> List[Conversion]:
+        return list(map(lambda order: OasisTakeConversion(self.oasis, order), self.oasis_orders(tokens)))
 
-    def zrx_orders(self, tokens):
-        if self.zrx_exchange is None or self.zrx_relayer_api is None:
+
+    def oasis_order_size(self, size):
+        if self.zrx_relayer_api is None:
             return []
 
-        orders = []
+        (bids, asks) = self.oasis_relayer_api.get_orders()
 
-        for token1 in tokens:
-            for token2 in tokens:
-                if token1 != token2:
-                    orders = orders + self.zrx_relayer_api.get_orders(token1, token2)
+        sai_token_amount = 0
+        arb_token_amount = 0
 
-        return list(filter(lambda order: order.expiration <= time.time(), orders))
+        if size is None:
+            sai_token_amount = 0
+            arb_token_amount = 0
 
-    def zrx_conversions(self, tokens) -> List[Conversion]:
-        return list(map(lambda order: ZrxFillOrderConversion(self.zrx_exchange, order), self.zrx_orders(tokens)))
 
-    def all_conversions(self):
-        return self.tub_conversions() + \
-               self.otc_conversions([self.sai.address, self.skr.address, self.gem.address]) + \
-               self.zrx_conversions([self.sai.address, self.gem.address])
+            for order in asks:
+                sai_token_amount = arb_token_amount + order[0] * order[1]
+                arb_token_amount = arb_token_amount + order[1]
+
+                if sai_token_amount >= self.entry_amount:
+                    return arb_token_amount - order[0] + (sai_token_amount - self.entry_amount) * (1/order[0]) #some linear interpolation
+
+        else
+            sai_token_amount = 0
+            arb_token_amount = 0
+
+            for order in bids:
+                sai_token_amount = sai_token_amount + order[0] * order[1]
+                arb_token_amount = arb_token_amount + order[1]
+
+                if arb_token_amount >= size:
+                    return sai_token_amount - (order[0] * order[1]) + (arb_token_amount - size) * (order[0]))
+
+    def uniswap_order_size(self, size):
+        #TODO: Add something here.
+        #Also add a uniswap.make function wrapper
 
     def process_block(self):
         """Callback called on each new block.
@@ -225,74 +227,60 @@ class ArbitrageKeeper:
         if self.errors >= self.max_errors:
             self.lifecycle.terminate()
         else:
-            self.execute_best_opportunity_available()
+            self.find_best_opportunity_available()
 
-    def execute_best_opportunity_available(self):
+    def find_best_opportunity_available(self):
         """Find the best arbitrage opportunity present and execute it."""
-        opportunity = self.best_opportunity(self.profitable_opportunities())
+
+        self.entry_amount = Wad.min(self.sai_token.balance_of(self.our_address), self.max_engagement)
+
+        oasis_arb_amount = oasis_order_size()
+        profit_oasis_to_uniswap = uniswap_order_size(oasis_arb_amount) - self.entry_amount
+
+        uniswap_arb_amount = uniswap_order_size()
+        profit_uniswap_to_oasis = oasis_order_size(uniswap_arb_amount) - self.entry_amount
+
+        # TODOcheck if positive is "Greater than" negative numbers
+        if profit_oasis_to_uniswap > profit_uniswap_to_oasis:
+            self.start_exchange, self.start_exchange.name, self.arb_amount = self.oasis, 'Oasis', oasis_arb_amount
+            self.end_exchange, self.end_exchange.name = self.uniswap_exchange, 'Uniswap'
+
+        else:
+            self.start_exchange, self.start_exchange.name, self.arb_amount = self.uniswap_exchange, 'Uniswap', uniswap_arb_amount
+            self.end_exchange, self.end_exchange.name = self.oasis, 'Oasis'
+
+        highestProfit = max(profit_oasis_to_uniswap, profit_uniswap_to_oasis)
+        self.exit_amount = highestProfit + self.entry_amount
+
+        opportunity = highestProfit if highestProfit > self.min_profit else None
+
         if opportunity:
             self.print_opportunity(opportunity)
-            self.execute_opportunity(opportunity)
-
-    def profitable_opportunities(self):
-        """Identify all profitable arbitrage opportunities within given limits."""
-        entry_amount = Wad.min(self.base_token.balance_of(self.our_address), self.max_engagement)
-        opportunity_finder = OpportunityFinder(conversions=self.all_conversions())
-        opportunities = opportunity_finder.find_opportunities(self.base_token.address, entry_amount)
-        opportunities = filter(lambda op: op.total_rate() > Ray.from_number(1.000001), opportunities)
-        opportunities = filter(lambda op: op.profit(self.base_token.address) > self.min_profit, opportunities)
-        opportunities = sorted(opportunities, key=lambda op: op.profit(self.base_token.address), reverse=True)
-        return opportunities
-
-    def best_opportunity(self, opportunities: List[Sequence]):
-        """Pick the best opportunity, or return None if no profitable opportunities."""
-        return opportunities[0] if len(opportunities) > 0 else None
-
-    def print_opportunity(self, opportunity: Sequence):
-        """Print the details of the opportunity."""
-        self.logger.info(f"Opportunity with id={opportunity.id()},"
-                         f" profit={opportunity.profit(self.base_token.address)} {self.token_name(self.base_token.address)}")
-
-        for index, conversion in enumerate(opportunity.steps, start=1):
-            self.logger.info(f"Step {index}/{len(opportunity.steps)}: {conversion.name()}"
-                             f" (from {conversion.source_amount} {self.token_name(conversion.source_token)}"
-                             f" to {conversion.target_amount} {self.token_name(conversion.target_token)})")
-
-    def execute_opportunity(self, opportunity: Sequence):
-        """Execute the opportunity either in one Ethereum transaction or step-by-step.
-        Depending on whether `tx_manager` is available."""
-        if self.tx_manager:
             self.execute_opportunity_in_one_transaction(opportunity)
-        else:
-            self.execute_opportunity_step_by_step(opportunity)
 
-    def execute_opportunity_step_by_step(self, opportunity: Sequence):
-        """Execute the opportunity step-by-step."""
 
-        def incoming_transfer(our_address: Address):
-            return lambda transfer: transfer.to_address == our_address
+    def print_opportunity(self, opportunity: int):
+        """Print the details of the opportunity."""
+        self.logger.info(f"Profit opportunity of {oppportunity} from {self.start_exchange.name} to {self.end_exchange.name}")
 
-        def outgoing_transfer(our_address: Address):
-            return lambda transfer: transfer.from_address == our_address
 
-        all_transfers = []
-        for step in opportunity.steps:
-            receipt = step.transact().transact(gas_price=self.gas_price())
-            if receipt:
-                all_transfers += receipt.transfers
-                outgoing = TransferFormatter().format(filter(outgoing_transfer(self.our_address), receipt.transfers), self.token_name)
-                incoming = TransferFormatter().format(filter(incoming_transfer(self.our_address), receipt.transfers), self.token_name)
-                self.logger.info(f"Exchanged {outgoing} to {incoming}")
-            else:
-                self.errors += 1
-                return
-        self.logger.info(f"The profit we made is {TransferFormatter().format_net(all_transfers, self.our_address, self.token_name)}")
-
-    def execute_opportunity_in_one_transaction(self, opportunity: Sequence):
+    # TODO: Figure out how to specify invocation for both Uniswap and Oasis order book
+    def execute_opportunity_in_one_transaction(self, opportunity: int):
         """Execute the opportunity in one transaction, using the `tx_manager`."""
-        tokens = [self.sai.address, self.skr.address, self.gem.address]
-        invocations = list(map(lambda step: step.transact().invocation(), opportunity.steps))
+
+        tokens = [self.sai.address, self.arb_token.address]
+
+        invocations = [self.start_echange.make(pay_token=self.sai.address,
+                                               pay_amount=self.entry_amount,
+                                               buy_token=self.arb_token.address,
+                                               buy_amount=self.arb_amount).invocation(),
+                       self.end_exchange.make(pay_token=self.arb_token.address,
+                                               pay_amount=self.arb_amount,
+                                               buy_token=self.sai.address,
+                                               buy_amount=self.exit_amount).invocation()]
+
         receipt = self.tx_manager.execute(tokens, invocations).transact(gas_price=self.gas_price())
+
         if receipt:
             self.logger.info(f"The profit we made is {TransferFormatter().format_net(receipt.transfers, self.our_address, self.token_name)}")
         else:
@@ -306,4 +294,4 @@ class ArbitrageKeeper:
 
 
 if __name__ == '__main__':
-    ArbitrageKeeper(sys.argv[1:]).main()
+    SimpleArbitrageKeeper(sys.argv[1:]).main()
