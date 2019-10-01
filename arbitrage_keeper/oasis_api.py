@@ -5,11 +5,10 @@ from pymaker.util import http_response_summary
 
 
 class OasisAPI:
-    """A client for the Standard 0x Relayer API V2.
-    <https://github.com/0xProject/standard-relayer-api/blob/master/http/v2.md>
-    Attributes:
-        exchange: The 0x Exchange V2 contract.
-        api_server: Base URL of the Standard Relayer API server.
+    """A class for reading and presenting json data from the Oasis Rest API
+
+    Documentation: developer.makerdao.com/oasis/api/v2
+
     """
     logger = logging.getLogger()
     timeout = 15.5
@@ -21,17 +20,16 @@ class OasisAPI:
 
 
     def get_orders(self):
-        """Returns active orders filtered by token pair (one side).
-        In order to get them, issues a `/v2/orders` call to the Standard Relayer API.
-        Args:
+        """Returns active orders filtered by token pair
+        In order to get them, issues an `/v2/orders/XYZ/XYZ` call to the Oasis REST API
 
-        Returns:
+        Returns: List of bid elements [price (float), amount (float)] and ask elements [price (float), amounts (float)]
 
         """
 
-        response = requests.get(f"{self.api_server}/v2/orders/{self.arb_token_name}/{self.sai_name}", timeout=self.timeout)
+        response = requests.get(f"{self.api_server}/v2/orders/{self.arb_token.name}/{self.sai.name}", timeout=self.timeout)
         if not response.ok:
-            raise Exception(f"Failed to fetch 0x orders from the relayer: {http_response_summary(response)}")
+            raise Exception(f"Failed to fetch Oasis orders from REST API: {http_response_summary(response)}")
 
         data = response.json()
         if 'data' in data:
