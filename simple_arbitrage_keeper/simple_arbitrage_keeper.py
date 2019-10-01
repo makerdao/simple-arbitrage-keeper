@@ -23,12 +23,12 @@ from typing import List
 
 from web3 import Web3, HTTPProvider
 
-from arbitrage_keeper.conversion import Conversion, OasisTakeConversion, ZrxFillOrderConversion
-from arbitrage_keeper.conversion import TubBoomConversion, TubBustConversion, TubExitConversion, TubJoinConversion
-from arbitrage_keeper.opportunity import OpportunityFinder, Sequence
-from arbitrage_keeper.uniswap import UniswapWrapper
-from arbitrage_keeper.oasis_api import OasisAPI
-from arbitrage_keeper.transfer_formatter import TransferFormatter
+
+
+from simple_arbitrage_keeper.uniswap import UniswapWrapper
+from simple_arbitrage_keeper.oasis_api import OasisAPI
+from simple_arbitrage_keeper.transfer_formatter import TransferFormatter
+
 from pymaker import Address
 from pymaker.approval import via_tx_manager, directly
 from pymaker.gas import DefaultGasPrice, FixedGasPrice
@@ -65,10 +65,10 @@ class SimpleArbitrageKeeper:
         parser.add_argument("--eth-key", type=str, nargs='*',
                             help="Ethereum private key(s) to use (e.g. 'key_file=aaa.json,pass_file=aaa.pass')")
 
-        parser.add_argument("--uniswap-sai-address", type=str, required=True
+        parser.add_argument("--uniswap-sai-address", type=str, required=True,
                             help="Ethereum address of the Uniswap Exchange contract for the SAI market")
 
-        parser.add_argument("--uniswap-arb-address", type=str, required=True
+        parser.add_argument("--uniswap-arb-address", type=str, required=True,
                             help="Ethereum address of the Uniswap Exchange contract for the arb token market")
 
         parser.add_argument("--oasis-address", type=str, required=True,
@@ -83,7 +83,7 @@ class SimpleArbitrageKeeper:
         parser.add_argument("--relayer-per-page", type=int, default=100,
                             help="Number of orders to fetch per one page from the 0x Relayer API (default: 100)")
 
-        parser.add_argument("--tx-manager", type=str, required=True
+        parser.add_argument("--tx-manager", type=str, required=True,
                             help="Ethereum address of the TxManager contract to use for multi-step arbitrage")
 
         parser.add_argument("--gas-price", type=int, default=0,
@@ -95,10 +95,10 @@ class SimpleArbitrageKeeper:
         parser.add_argument("--arb-token-name", type=str, required=True,
                             help="The token name (e.g. MKR) that arbitraged between both exchanges")
 
-        parser.add_argument("--min-profit", type=float, required=True,
+        parser.add_argument("--min-profit", type=int, required=True,
                             help="Wei amount of minimum profit (in base token) from one arbitrage operation")
 
-        parser.add_argument("--max-engagement", type=float, required=True,
+        parser.add_argument("--max-engagement", type=int, required=True,
                             help="Wei amount of maximum engagement (in base token) in one arbitrage operation")
 
         parser.add_argument("--max-errors", type=int, default=100,
@@ -201,7 +201,7 @@ class SimpleArbitrageKeeper:
                 if sai_token_amount >= self.entry_amount.value:
                     return Wad(arb_token_amount - order[0] + (sai_token_amount - self.entry_amount) * (1/order[0])) #some linear interpolation
 
-        else
+        else:
             sai_token_amount = 0
             arb_token_amount = 0
 
@@ -210,14 +210,14 @@ class SimpleArbitrageKeeper:
                 arb_token_amount = arb_token_amount + order[1]
 
                 if arb_token_amount >= size.value:
-                    return Wad(sai_token_amount - (order[0] * order[1]) + (arb_token_amount - size) * (order[0]))) #some linear interpolation
+                    return Wad(sai_token_amount - (order[0] * order[1]) + (arb_token_amount - size) * (order[0])) #some linear interpolation
 
     def uniswap_order_size(self, size):
         if size is None:
             ethAmt = self.uniswap_sai_exchange.get_eth_token_output_price(self.entry_amount)
             arbAmt = self.uniswap_arb_amount.get_token_eth_output_price(ethAmt)
             return Wad(arbAmt)
-        else
+        else:
             ethAmt = self.uniswap_arb_exchange.get_eth_token_output_price(size)
             saiAmt = self.uniswap_sai_exchange.get_token_eth_output_price(ethAmt)
             return Wad(saiAmt)

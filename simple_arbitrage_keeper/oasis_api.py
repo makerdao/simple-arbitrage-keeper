@@ -7,7 +7,7 @@ from pymaker.util import http_response_summary
 class OasisAPI:
     """A class for reading and presenting json data from the Oasis Rest API
 
-    Documentation: developer.makerdao.com/oasis/api/v2
+    Documentation: developer.makerdao.com/oasis/api/2/markets
 
     """
     logger = logging.getLogger()

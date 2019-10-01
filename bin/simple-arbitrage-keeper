@@ -1,0 +1,7 @@
+#!/bin/sh
+dir="$(dirname "$0")"/..
+PYTHONPATH=$PYTHONPATH:$dir:$dir/lib/pyexchange
+PYTHONPATH=$PYTHONPATH:$dir:$dir/lib/pymaker
+export PYTHONPATH
+
+exec python3 -m simple_arbitrage_keeper.simple_arbitrage_keeper $@
