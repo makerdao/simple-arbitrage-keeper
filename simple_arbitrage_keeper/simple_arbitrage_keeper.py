@@ -62,13 +62,13 @@ class SimpleArbitrageKeeper:
         parser.add_argument("--eth-from", type=str, required=True,
                             help="Ethereum account from which to send transactions")
 
-        parser.add_argument("--eth-key", type=str, nargs='*',
+        parser.add_argument("--eth-key", type=str, nargs='*', required=True,
                             help="Ethereum private key(s) to use (e.g. 'key_file=aaa.json,pass_file=aaa.pass')")
 
-        parser.add_argument("--uniswap-sai-address", type=str, required=True,
+        parser.add_argument("--uniswap-sai-exchange", type=str, required=True,
                             help="Ethereum address of the Uniswap Exchange contract for the SAI market")
 
-        parser.add_argument("--uniswap-arb-address", type=str, required=True,
+        parser.add_argument("--uniswap-arb-exchange", type=str, required=True,
                             help="Ethereum address of the Uniswap Exchange contract for the arb token market")
 
         parser.add_argument("--oasis-address", type=str, required=True,
@@ -117,19 +117,19 @@ class SimpleArbitrageKeeper:
 
 
         self.sai = ERC20Token(web3=self.web3, address=Address('0xC4375B7De8af5a38a93548eb8453a498222C4fF2')) #SAI
-        self.sai.name = "SAI"
+        self.sai.name = "DAI"
         self.arb_token = ERC20Token(web3=self.web3, address=Address(self.arguments.arb_token)) #MKR, WETH or other
         self.arb_token.name = self.arguments.arb_token_name \
             if self.arguments.arb_token_name != 'WETH' else 'ETH'
 
 
         self.uniswap_sai_exchange = UniswapWrapper(self.web3, self.sai.address, Address(self.arguments.uniswap_sai_exchange)) \
-            if self.arguments.exchange_address is not None else None
+            if self.arguments.uniswap_sai_exchange is not None else None
 
         self.uniswap_arb_exchange = UniswapWrapper(self.web3, self.arb_token.address, Address(self.arguments.uniswap_arb_exchange)) \
-            if self.arguments.exchange_address is not None else None
+            if self.arguments.uniswap_arb_exchange is not None else None
 
-        self.oasis_relayer_api = OasisAPI(self, api_server=self.arguments.oasis_api_endpoint) \
+        self.oasis_api_endpoint = OasisAPI(api_server=self.arguments.oasis_api_endpoint, sai_name=self.sai.name, arb_token_name=self.arb_token.name) \
             if self.arguments.oasis_api_endpoint is not None else None
 
         self.oasis = MatchingMarket(web3=self.web3,
@@ -138,8 +138,8 @@ class SimpleArbitrageKeeper:
                                     if self.arguments.oasis_support_address is not None else None)
 
 
-        self.min_profit = Wad.from_number(self.arguments.min_profit)
-        self.max_engagement = Wad.from_number(self.arguments.max_engagement)
+        self.min_profit = Wad(self.arguments.min_profit)
+        self.max_engagement = Wad(self.arguments.max_engagement)
         self.max_errors = self.arguments.max_errors
         self.errors = 0
 
@@ -180,44 +180,46 @@ class SimpleArbitrageKeeper:
 
 
     #TODO: Check what units the oasis api results are in
-    def oasis_order_size(self, size: Wad):
-        if self.oasis_relayer_api is None:
+    def oasis_order_size(self, size: Wad = None):
+        if self.oasis_api_endpoint is None:
             return None
 
-        (bids, asks) = self.oasis_relayer_api.get_orders()
+        (bids, asks) = self.oasis_api_endpoint.get_orders()
 
         sai_token_amount = 0
         arb_token_amount = 0
 
         if size is None:
-            sai_token_amount = 0
-            arb_token_amount = 0
-
-
             for order in asks:
-                sai_token_amount = arb_token_amount + order[0] * order[1]
+                sai_token_amount = sai_token_amount + order[0] * order[1]
                 arb_token_amount = arb_token_amount + order[1]
 
-                if sai_token_amount >= self.entry_amount.value:
-                    return Wad(arb_token_amount - order[0] + (sai_token_amount - self.entry_amount) * (1/order[0])) #some linear interpolation
+                if sai_token_amount >= float(self.entry_amount):
+                    final_arb_token_amount = arb_token_amount - order[1] + \
+                        (float(self.entry_amount) - (sai_token_amount - order[0] * order[1])) * (1/order[0])
+                    return Wad(int(final_arb_token_amount*10**18)) #some linear interpolation
 
         else:
-            sai_token_amount = 0
-            arb_token_amount = 0
-
             for order in bids:
                 sai_token_amount = sai_token_amount + order[0] * order[1]
                 arb_token_amount = arb_token_amount + order[1]
 
-                if arb_token_amount >= size.value:
-                    return Wad(sai_token_amount - (order[0] * order[1]) + (arb_token_amount - size) * (order[0])) #some linear interpolation
+                if arb_token_amount >= float(size):
+                    final_sai_token_amount = sai_token_amount - (order[0] * order[1]) + \
+                        (float(size) - (arb_token_amount - order[1])) * (order[0])
+                    return Wad(int(final_sai_token_amount*10**18)) #some linear interpolation
 
-    def uniswap_order_size(self, size):
+
+    def uniswap_order_size(self, size: Wad = None):
         if size is None:
+            # print(self.entry_amount)
+            # print(type(self.entry_amount))
             ethAmt = self.uniswap_sai_exchange.get_eth_token_output_price(self.entry_amount)
-            arbAmt = self.uniswap_arb_amount.get_token_eth_output_price(ethAmt)
+            arbAmt = self.uniswap_arb_exchange.get_token_eth_output_price(ethAmt)
             return Wad(arbAmt)
         else:
+            # print(size)
+            # print(type(size))
             ethAmt = self.uniswap_arb_exchange.get_eth_token_output_price(size)
             saiAmt = self.uniswap_sai_exchange.get_token_eth_output_price(ethAmt)
             return Wad(saiAmt)
@@ -235,13 +237,13 @@ class SimpleArbitrageKeeper:
     def find_best_opportunity_available(self):
         """Find the best arbitrage opportunity present and execute it."""
 
-        self.entry_amount = Wad.min(self.sai_token.balance_of(self.our_address), self.max_engagement)
+        self.entry_amount = Wad.min(self.sai.balance_of(self.our_address), self.max_engagement)
 
-        oasis_arb_amount = oasis_order_size()
-        profit_oasis_to_uniswap = uniswap_order_size(oasis_arb_amount) - self.entry_amount
+        oasis_arb_amount = self.oasis_order_size()
+        profit_oasis_to_uniswap = self.uniswap_order_size(oasis_arb_amount) - self.entry_amount
 
-        uniswap_arb_amount = uniswap_order_size()
-        profit_uniswap_to_oasis = oasis_order_size(uniswap_arb_amount) - self.entry_amount
+        uniswap_arb_amount = self.uniswap_order_size()
+        profit_uniswap_to_oasis = self.oasis_order_size(uniswap_arb_amount) - self.entry_amount
 
         if profit_oasis_to_uniswap > profit_uniswap_to_oasis:
             self.start_exchange, self.start_exchange.name, self.arb_amount = self.oasis, 'Oasis', Wad(oasis_arb_amount)
@@ -254,19 +256,19 @@ class SimpleArbitrageKeeper:
         highestProfit = max(profit_oasis_to_uniswap, profit_uniswap_to_oasis)
         self.exit_amount = highestProfit + self.entry_amount
 
-        print(highestProfit.value)
+
 
         opportunity = highestProfit if highestProfit > self.min_profit else None
 
         # TODO uncomment this when ready to test transactions
-        # if opportunity:
-        #     self.print_opportunity(opportunity)
-        #     self.execute_opportunity_in_one_transaction()
+        if opportunity:
+            self.print_opportunity(opportunity)
+            # self.execute_opportunity_in_one_transaction()
 
 
     def print_opportunity(self, opportunity: Wad):
         """Print the details of the opportunity."""
-        self.logger.info(f"Profit opportunity of {oppportunity.value} from {self.start_exchange.name} to {self.end_exchange.name}")
+        self.logger.info(f"Profit opportunity of {opportunity} DAI from {self.start_exchange.name} to {self.end_exchange.name}")
 
 
     # TODO: Figure out how to specify invocation for both Uniswap and Oasis order book

@@ -1,5 +1,11 @@
-from pymaker import Transact
+from pymaker import Transact, Address
 from pyexchange.uniswap import Uniswap
+
+from web3 import Web3
+from typing import List
+from pymaker.token import ERC20Token
+from pymaker.numeric import Wad
+
 
 
 class UniswapWrapper:
