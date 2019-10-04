@@ -63,17 +63,19 @@ class UniswapWrapper:
         """ From Uniswap contract API
 
             tokenToTokenSwapInput(
-                tokens_sold: uint256,
-                min_tokens_bought: uint256,
-                min_eth_bought: uint256,
-                deadline: uint256,
-                token_addr: address
-            ): uint256
+                tokens_sold: uint256,           -> Amount of input ERC20 tokens sold
+                min_tokens_bought: uint256,     -> Minimum output ERC20 tokens bought
+                min_eth_bought: uint256,        -> Minimum ETH bought as intermediary
+                deadline: uint256,              -> Transaction deadline
+                token_addr: address             -> Address of output ERC20 token
+            ): uint256                          -> Amount of output ERC20 tokens bought
+
+
 
         """
 
         return Transact(self, self.uniswap_base.web3, self.uniswap_base.abi, self.uniswap_base.exchange, self.uniswap_base._contract,
-                        'tokenToTokenSwapInput', [pay_amount.value, buy_amount.value, 1, self._deadline(), buy_token.address])
+                        'tokenToTokenSwapInput', [pay_amount.value, buy_amount.value, 1, self.uniswap_base._deadline(), buy_token.address])
 
 
     def get_eth_token_output_price(self, amount: Wad):
