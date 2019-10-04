@@ -60,49 +60,46 @@ class SimpleArbitrageKeeper:
                             help="JSON-RPC timeout (in seconds, default: 10)")
 
         parser.add_argument("--eth-from", type=str, required=True,
-                            help="Ethereum account from which to send transactions")
+                            help="Ethereum address from which to send transactions; checksummed (e.g. '0x12AebC')")
 
         parser.add_argument("--eth-key", type=str, nargs='*', required=True,
-                            help="Ethereum private key(s) to use (e.g. 'key_file=aaa.json,pass_file=aaa.pass')")
+                            help="Ethereum private key(s) to use (e.g. 'key_file=/path/to/keystore.json,pass_file=/path/to/passphrase.txt')")
 
         parser.add_argument("--uniswap-entry-exchange", type=str, required=True,
-                            help="Ethereum address of the Uniswap Exchange contract for the SAI market")
+                            help="Ethereum address of the Uniswap Exchange contract for the entry token market; checksummed (e.g. '0x12AebC')")
 
         parser.add_argument("--uniswap-arb-exchange", type=str, required=True,
-                            help="Ethereum address of the Uniswap Exchange contract for the arb token market")
+                            help="Ethereum address of the Uniswap Exchange contract for the arb token market; checksummed (e.g. '0x12AebC')")
 
         parser.add_argument("--oasis-address", type=str, required=True,
-                            help="Ethereum address of the OasisDEX contract")
-
-        parser.add_argument("--oasis-support-address", type=str, required=False,
-                            help="Ethereum address of the OasisDEX support contract")
+                            help="Ethereum address of the OasisDEX contract; checksummed (e.g. '0x12AebC')")
 
         parser.add_argument("--oasis-api-endpoint", type=str, required=True,
-                            help="Address of the Oasis V2 REST API")
+                            help="Address of the Oasis V2 REST API; checksummed (e.g. '0x12AebC')")
 
         parser.add_argument("--relayer-per-page", type=int, default=100,
                             help="Number of orders to fetch per one page from the 0x Relayer API (default: 100)")
 
         parser.add_argument("--tx-manager", type=str, required=True,
-                            help="Ethereum address of the TxManager contract to use for multi-step arbitrage")
+                            help="Ethereum address of the TxManager contract to use for multi-step arbitrage; checksummed (e.g. '0x12AebC')")
 
         parser.add_argument("--gas-price", type=int, default=0,
-                            help="Gas price in Wei (default: node default)")
+                            help="Gas price in Wei (default: node default), (e.g. 1000000000 for 1 GWei)")
 
         parser.add_argument("--entry-token", type=str, required=True,
-                            help="The token address that the bot starts and ends with in every transaction (DAI)")
+                            help="The token address that the bot starts and ends with in every transaction; checksummed (e.g. '0x12AebC')")
 
         parser.add_argument("--arb-token", type=str, required=True,
-                            help="The token address that arbitraged between both exchanges")
+                            help="The token address that arbitraged between both exchanges; checksummed (e.g. '0x12AebC')")
 
         parser.add_argument("--arb-token-name", type=str, required=True,
-                            help="The token name (e.g. MKR) that arbitraged between both exchanges")
+                            help="The token name that arbitraged between both exchanges (e.g. 'DAI', 'WETH', 'MKR')")
 
         parser.add_argument("--min-profit", type=int, required=True,
-                            help="Wei amount of minimum profit (in base token) from one arbitrage operation")
+                            help="Ether amount of minimum profit (in base token) from one arbitrage operation (e.g. 1 for 1 Dai min profit)")
 
         parser.add_argument("--max-engagement", type=int, required=True,
-                            help="Wei amount of maximum engagement (in base token) in one arbitrage operation")
+                            help="Ether amount of maximum engagement (in base token) in one arbitrage operation (e.g. 100 for 100 Dai max engagement)")
 
         parser.add_argument("--max-errors", type=int, default=100,
                             help="Maximum number of allowed errors before the keeper terminates (default: 100)")
