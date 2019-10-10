@@ -93,7 +93,7 @@ class SimpleArbitrageKeeper:
                             help="The token address that arbitraged between both exchanges; checksummed (e.g. '0x12AebC')")
 
         parser.add_argument("--arb-token-name", type=str, required=True,
-                            help="The token name that arbitraged between both exchanges (e.g. 'DAI', 'WETH', 'MKR')")
+                            help="The token name that arbitraged between both exchanges (e.g. 'DAI', 'WETH', 'REP')")
 
         parser.add_argument("--min-profit", type=int, required=True,
                             help="Ether amount of minimum profit (in base token) from one arbitrage operation (e.g. 1 for 1 Dai min profit)")
@@ -118,7 +118,7 @@ class SimpleArbitrageKeeper:
 
         self.sai = ERC20Token(web3=self.web3, address=Address(self.arguments.entry_token)) #SAI
         self.sai.name = "DAI"
-        self.arb_token = ERC20Token(web3=self.web3, address=Address(self.arguments.arb_token)) #MKR, WETH or other
+        self.arb_token = ERC20Token(web3=self.web3, address=Address(self.arguments.arb_token))
         self.arb_token.name = self.arguments.arb_token_name \
             if self.arguments.arb_token_name != 'WETH' else 'ETH'
 
@@ -254,7 +254,7 @@ class SimpleArbitrageKeeper:
         self.exit_amount = highestProfit + self.entry_amount
 
         #Print the highest profit/(loss) to see how close we come to breaking even
-        print(f"Best trade regardless of profit/min-profit: {highestProfit}")
+        print(f"Best trade regardless of profit/min-profit: {highestProfit} DAI from {self.start_exchange.name} to {self.end_exchange.name}")
 
 
         opportunity = highestProfit if highestProfit > self.min_profit else None
@@ -262,7 +262,7 @@ class SimpleArbitrageKeeper:
         # TODO uncomment this when ready to test transactions
         if opportunity:
             self.print_opportunity(opportunity)
-            # self.execute_opportunity_in_one_transaction()
+            self.execute_opportunity_in_one_transaction()
 
 
     def print_opportunity(self, opportunity: Wad):
@@ -285,7 +285,7 @@ class SimpleArbitrageKeeper:
                                                buy_token=self.sai.address,
                                                buy_amount=self.exit_amount).invocation()]
 
-        receipt = self.tx_manager.execute(tokens, invocations).transact(gas_price=self.gas_price())
+        receipt = self.tx_manager.execute(tokens, invocations).transact(gas_price=self.gas_price(), gas_buffer=500000)
 
         if receipt:
             self.logger.info(f"The profit we made is {TransferFormatter().format_net(receipt.transfers, self.our_address, self.sai.name)}")
