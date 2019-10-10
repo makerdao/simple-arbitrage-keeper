@@ -132,10 +132,7 @@ class SimpleArbitrageKeeper:
         self.oasis_api_endpoint = OasisAPI(api_server=self.arguments.oasis_api_endpoint, sai_name=self.sai.name, arb_token_name=self.arb_token.name) \
             if self.arguments.oasis_api_endpoint is not None else None
 
-        self.oasis = MatchingMarket(web3=self.web3,
-                                  address=Address(self.arguments.oasis_address),
-                                  support_address=Address(self.arguments.oasis_support_address)
-                                    if self.arguments.oasis_support_address is not None else None)
+        self.oasis = MatchingMarket(web3=self.web3, address=Address(self.arguments.oasis_address))
 
 
         self.min_profit = Wad(int(self.arguments.min_profit * 10**18))
