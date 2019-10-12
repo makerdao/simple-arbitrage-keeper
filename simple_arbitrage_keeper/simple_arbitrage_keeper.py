@@ -19,7 +19,6 @@ import argparse
 import logging
 import sys
 import time
-from typing import List
 
 from web3 import Web3, HTTPProvider
 
@@ -34,12 +33,10 @@ from pymaker.approval import via_tx_manager, directly
 from pymaker.gas import DefaultGasPrice, FixedGasPrice
 from pymaker.keys import register_keys
 from pymaker.lifecycle import Lifecycle
-from pymaker.numeric import Wad, Ray
+from pymaker.numeric import Wad
 from pymaker.oasis import MatchingMarket
-from pymaker.sai import Tub, Tap
 from pymaker.token import ERC20Token
 from pymaker.transactional import TxManager
-from pymaker.zrx import ZrxExchange, ZrxRelayerApi
 
 
 class SimpleArbitrageKeeper:
@@ -117,7 +114,6 @@ class SimpleArbitrageKeeper:
 
 
         self.sai = ERC20Token(web3=self.web3, address=Address(self.arguments.entry_token)) #SAI
-        self.sai.name = "DAI"
         self.arb_token = ERC20Token(web3=self.web3, address=Address(self.arguments.arb_token))
         self.arb_token.name = self.arguments.arb_token_name \
             if self.arguments.arb_token_name != 'WETH' else 'ETH'
@@ -129,7 +125,9 @@ class SimpleArbitrageKeeper:
         self.uniswap_arb_exchange = UniswapWrapper(self.web3, self.arb_token.address, Address(self.arguments.uniswap_arb_exchange)) \
             if self.arguments.uniswap_arb_exchange is not None else None
 
-        self.oasis_api_endpoint = OasisAPI(api_server=self.arguments.oasis_api_endpoint, sai_name=self.sai.name, arb_token_name=self.arb_token.name) \
+        self.oasis_api_endpoint = OasisAPI(api_server=self.arguments.oasis_api_endpoint,
+                                           sai_name=self.token_name(self.sai.address),
+                                           arb_token_name=self.arb_token.name) \
             if self.arguments.oasis_api_endpoint is not None else None
 
         self.oasis = MatchingMarket(web3=self.web3, address=Address(self.arguments.oasis_address))
@@ -176,7 +174,12 @@ class SimpleArbitrageKeeper:
             self.tx_manager.approve([self.sai, self.arb_token], directly(gas_price=self.gas_price()))
 
 
-    #TODO: Check what units the oasis api results are in
+    def token_name(self, address: Address) -> str:
+        if address == self.sai.address:
+            return "DAI"
+        else:
+            return str(address)
+
     def oasis_order_size(self, size: Wad = None):
         if self.oasis_api_endpoint is None:
             return None
@@ -192,9 +195,10 @@ class SimpleArbitrageKeeper:
                 arb_token_amount = arb_token_amount + order[1]
 
                 if sai_token_amount >= float(self.entry_amount):
+                    #some linear interpolation
                     final_arb_token_amount = arb_token_amount - order[1] + \
                         (float(self.entry_amount) - (sai_token_amount - order[0] * order[1])) * (1/order[0])
-                    return Wad(int(final_arb_token_amount*10**18)) #some linear interpolation
+                    return Wad(int(final_arb_token_amount*10**18))
 
         else:
             for order in bids:
@@ -202,23 +206,20 @@ class SimpleArbitrageKeeper:
                 arb_token_amount = arb_token_amount + order[1]
 
                 if arb_token_amount >= float(size):
+                    #some linear interpolation
                     final_sai_token_amount = sai_token_amount - (order[0] * order[1]) + \
                         (float(size) - (arb_token_amount - order[1])) * (order[0])
-                    return Wad(int(final_sai_token_amount*10**18)) #some linear interpolation
+                    return Wad(int(final_sai_token_amount*10**18))
 
 
     def uniswap_order_size(self, size: Wad = None):
         if size is None:
-            # print(self.entry_amount)
-            # print(type(self.entry_amount))
-            ethAmt = self.uniswap_entry_exchange.get_eth_token_output_price(self.entry_amount)
-            arbAmt = self.uniswap_arb_exchange.get_token_eth_output_price(ethAmt)
+            ethAmt = self.uniswap_entry_exchange.uniswap_base.get_token_eth_input_price(self.entry_amount)
+            arbAmt = self.uniswap_arb_exchange.uniswap_base.get_eth_token_input_price(ethAmt)
             return Wad(arbAmt)
         else:
-            # print(size)
-            # print(type(size))
-            ethAmt = self.uniswap_arb_exchange.get_eth_token_output_price(size)
-            saiAmt = self.uniswap_entry_exchange.get_token_eth_output_price(ethAmt)
+            ethAmt = self.uniswap_arb_exchange.uniswap_base.get_token_eth_input_price(size)
+            saiAmt = self.uniswap_entry_exchange.uniswap_base.get_eth_token_input_price(ethAmt)
             return Wad(saiAmt)
 
 
@@ -243,26 +244,26 @@ class SimpleArbitrageKeeper:
         profit_uniswap_to_oasis = self.oasis_order_size(uniswap_arb_amount) - self.entry_amount
 
         if profit_oasis_to_uniswap > profit_uniswap_to_oasis:
-            self.start_exchange, self.start_exchange.name, self.arb_amount = self.oasis, 'Oasis', Wad(oasis_arb_amount)
+            self.start_exchange, self.start_exchange.name, self.arb_amount = self.oasis, 'Oasis', oasis_arb_amount * Wad.from_number(0.999999)
             self.end_exchange, self.end_exchange.name = self.uniswap_arb_exchange, 'Uniswap'
 
         else:
-            self.start_exchange, self.start_exchange.name, self.arb_amount = self.uniswap_entry_exchange, 'Uniswap', Wad(uniswap_arb_amount)
+            self.start_exchange, self.start_exchange.name, self.arb_amount = self.uniswap_entry_exchange, 'Uniswap', uniswap_arb_amount * Wad.from_number(0.999999)
             self.end_exchange, self.end_exchange.name = self.oasis, 'Oasis'
 
         highestProfit = max(profit_oasis_to_uniswap, profit_uniswap_to_oasis)
-        self.exit_amount = highestProfit + self.entry_amount
+        self.exit_amount = (highestProfit + self.entry_amount) * Wad.from_number(0.999999)
 
         #Print the highest profit/(loss) to see how close we come to breaking even
-        print(f"Best trade regardless of profit/min-profit: {highestProfit} DAI from {self.start_exchange.name} to {self.end_exchange.name}")
-
+        self.logger.info(f"Best trade regardless of profit/min-profit: {highestProfit} DAI from {self.start_exchange.name} to {self.end_exchange.name}")
 
         opportunity = highestProfit if highestProfit > self.min_profit else None
 
-        # TODO uncomment this when ready to test transactions
         if opportunity:
             self.print_opportunity(opportunity)
             self.execute_opportunity_in_one_transaction()
+
+
 
 
     def print_opportunity(self, opportunity: Wad):
@@ -270,7 +271,6 @@ class SimpleArbitrageKeeper:
         self.logger.info(f"Profit opportunity of {opportunity} DAI from {self.start_exchange.name} to {self.end_exchange.name}")
 
 
-    # TODO: Figure out how to specify invocation for both Uniswap and Oasis order book
     def execute_opportunity_in_one_transaction(self):
         """Execute the opportunity in one transaction, using the `tx_manager`."""
 
@@ -285,10 +285,10 @@ class SimpleArbitrageKeeper:
                                                buy_token=self.sai.address,
                                                buy_amount=self.exit_amount).invocation()]
 
-        receipt = self.tx_manager.execute(tokens, invocations).transact(gas_price=self.gas_price(), gas_buffer=500000)
+        receipt = self.tx_manager.execute(tokens, invocations).transact(gas_price=self.gas_price(), gas_buffer=300000)
 
         if receipt:
-            self.logger.info(f"The profit we made is {TransferFormatter().format_net(receipt.transfers, self.our_address, self.sai.name)}")
+            self.logger.info(f"The profit we made is {TransferFormatter().format_net(receipt.transfers, self.our_address, self.token_name)}")
         else:
             self.errors += 1
 

@@ -76,10 +76,3 @@ class UniswapWrapper:
 
         return Transact(self, self.uniswap_base.web3, self.uniswap_base.abi, self.uniswap_base.exchange, self.uniswap_base._contract,
                         'tokenToTokenSwapInput', [pay_amount.value, buy_amount.value, 1, self.uniswap_base._deadline(), buy_token.address])
-
-
-    def get_eth_token_output_price(self, amount: Wad):
-        return self.uniswap_base.get_eth_token_output_price(amount)
-
-    def get_token_eth_output_price(self, amount: Wad):
-        return self.uniswap_base.get_token_eth_output_price(amount)
