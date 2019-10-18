@@ -90,13 +90,13 @@ class SimpleArbitrageKeeper:
                             help="The token address that arbitraged between both exchanges; checksummed (e.g. '0x12AebC')")
 
         parser.add_argument("--arb-token-name", type=str, required=True,
-                            help="The token name that arbitraged between both exchanges (e.g. 'DAI', 'WETH', 'REP')")
+                            help="The token name that arbitraged between both exchanges (e.g. 'SAI', 'WETH', 'REP')")
 
         parser.add_argument("--min-profit", type=int, required=True,
-                            help="Ether amount of minimum profit (in base token) from one arbitrage operation (e.g. 1 for 1 Dai min profit)")
+                            help="Ether amount of minimum profit (in base token) from one arbitrage operation (e.g. 1 for 1 Sai min profit)")
 
         parser.add_argument("--max-engagement", type=int, required=True,
-                            help="Ether amount of maximum engagement (in base token) in one arbitrage operation (e.g. 100 for 100 Dai max engagement)")
+                            help="Ether amount of maximum engagement (in base token) in one arbitrage operation (e.g. 100 for 100 Sai max engagement)")
 
         parser.add_argument("--max-errors", type=int, default=100,
                             help="Maximum number of allowed errors before the keeper terminates (default: 100)")
@@ -112,21 +112,22 @@ class SimpleArbitrageKeeper:
         register_keys(self.web3, self.arguments.eth_key)
         self.our_address = Address(self.arguments.eth_from)
 
+        self.sai = ERC20Token(web3=self.web3, address=Address('0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359'))
 
-        self.sai = ERC20Token(web3=self.web3, address=Address(self.arguments.entry_token)) #SAI
+        self.entry_token = ERC20Token(web3=self.web3, address=Address(self.arguments.entry_token))
         self.arb_token = ERC20Token(web3=self.web3, address=Address(self.arguments.arb_token))
         self.arb_token.name = self.arguments.arb_token_name \
             if self.arguments.arb_token_name != 'WETH' else 'ETH'
 
 
-        self.uniswap_entry_exchange = UniswapWrapper(self.web3, self.sai.address, Address(self.arguments.uniswap_entry_exchange)) \
+        self.uniswap_entry_exchange = UniswapWrapper(self.web3, self.entry_token.address, Address(self.arguments.uniswap_entry_exchange)) \
             if self.arguments.uniswap_entry_exchange is not None else None
 
         self.uniswap_arb_exchange = UniswapWrapper(self.web3, self.arb_token.address, Address(self.arguments.uniswap_arb_exchange)) \
             if self.arguments.uniswap_arb_exchange is not None else None
 
         self.oasis_api_endpoint = OasisAPI(api_server=self.arguments.oasis_api_endpoint,
-                                           sai_name=self.token_name(self.sai.address),
+                                           entry_token_name=self.token_name(self.entry_token.address),
                                            arb_token_name=self.arb_token.name) \
             if self.arguments.oasis_api_endpoint is not None else None
 
@@ -162,16 +163,16 @@ class SimpleArbitrageKeeper:
         approval_method = via_tx_manager(self.tx_manager, gas_price=self.gas_price()) if self.tx_manager \
             else directly(gas_price=self.gas_price())
 
-        self.oasis.approve([self.sai, self.arb_token], approval_method)
+        self.oasis.approve([self.entry_token, self.arb_token], approval_method)
 
         if self.uniswap_entry_exchange:
-            self.uniswap_entry_exchange.approve([self.sai], approval_method)
+            self.uniswap_entry_exchange.approve([self.entry_token], approval_method)
 
         if self.uniswap_arb_exchange:
             self.uniswap_arb_exchange.approve([self.arb_token], approval_method)
 
         if self.tx_manager:
-            self.tx_manager.approve([self.sai, self.arb_token], directly(gas_price=self.gas_price()))
+            self.tx_manager.approve([self.entry_token, self.arb_token], directly(gas_price=self.gas_price()))
 
 
     def token_name(self, address: Address) -> str:
@@ -186,30 +187,30 @@ class SimpleArbitrageKeeper:
 
         (bids, asks) = self.oasis_api_endpoint.get_orders()
 
-        sai_token_amount = 0
+        entry_token_amount = 0
         arb_token_amount = 0
 
         if size is None:
             for order in asks:
-                sai_token_amount = sai_token_amount + order[0] * order[1]
+                entry_token_amount = entry_token_amount + order[0] * order[1]
                 arb_token_amount = arb_token_amount + order[1]
 
-                if sai_token_amount >= float(self.entry_amount):
+                if entry_token_amount >= float(self.entry_amount):
                     #some linear interpolation
                     final_arb_token_amount = arb_token_amount - order[1] + \
-                        (float(self.entry_amount) - (sai_token_amount - order[0] * order[1])) * (1/order[0])
+                        (float(self.entry_amount) - (entry_token_amount - order[0] * order[1])) * (1/order[0])
                     return Wad(int(final_arb_token_amount*10**18))
 
         else:
             for order in bids:
-                sai_token_amount = sai_token_amount + order[0] * order[1]
+                entry_token_amount = entry_token_amount + order[0] * order[1]
                 arb_token_amount = arb_token_amount + order[1]
 
                 if arb_token_amount >= float(size):
                     #some linear interpolation
-                    final_sai_token_amount = sai_token_amount - (order[0] * order[1]) + \
+                    final_entry_token_amount = entry_token_amount - (order[0] * order[1]) + \
                         (float(size) - (arb_token_amount - order[1])) * (order[0])
-                    return Wad(int(final_sai_token_amount*10**18))
+                    return Wad(int(final_entry_token_amount*10**18))
 
 
     def uniswap_order_size(self, size: Wad = None):
@@ -219,8 +220,8 @@ class SimpleArbitrageKeeper:
             return Wad(arbAmt)
         else:
             ethAmt = self.uniswap_arb_exchange.uniswap_base.get_token_eth_input_price(size)
-            saiAmt = self.uniswap_entry_exchange.uniswap_base.get_eth_token_input_price(ethAmt)
-            return Wad(saiAmt)
+            entryAmt = self.uniswap_entry_exchange.uniswap_base.get_eth_token_input_price(ethAmt)
+            return Wad(entryAmt)
 
 
     def process_block(self):
@@ -235,7 +236,7 @@ class SimpleArbitrageKeeper:
     def find_best_opportunity_available(self):
         """Find the best arbitrage opportunity present and execute it."""
 
-        self.entry_amount = Wad.min(self.sai.balance_of(self.our_address), self.max_engagement)
+        self.entry_amount = Wad.min(self.entry_token.balance_of(self.our_address), self.max_engagement)
 
         oasis_arb_amount = self.oasis_order_size()
         profit_oasis_to_uniswap = self.uniswap_order_size(oasis_arb_amount) - self.entry_amount
@@ -244,18 +245,21 @@ class SimpleArbitrageKeeper:
         profit_uniswap_to_oasis = self.oasis_order_size(uniswap_arb_amount) - self.entry_amount
 
         if profit_oasis_to_uniswap > profit_uniswap_to_oasis:
-            self.start_exchange, self.start_exchange.name, self.arb_amount = self.oasis, 'Oasis', oasis_arb_amount * Wad.from_number(0.999999)
+            self.start_exchange, self.start_exchange.name = self.oasis, 'Oasis'
+            self.arb_amount = oasis_arb_amount * Wad.from_number(0.999999)
             self.end_exchange, self.end_exchange.name = self.uniswap_arb_exchange, 'Uniswap'
 
         else:
-            self.start_exchange, self.start_exchange.name, self.arb_amount = self.uniswap_entry_exchange, 'Uniswap', uniswap_arb_amount * Wad.from_number(0.999999)
+            self.start_exchange, self.start_exchange.name = self.uniswap_entry_exchange, 'Uniswap'
+            self.arb_amount = uniswap_arb_amount * Wad.from_number(0.999999)
             self.end_exchange, self.end_exchange.name = self.oasis, 'Oasis'
 
         highestProfit = max(profit_oasis_to_uniswap, profit_uniswap_to_oasis)
         self.exit_amount = (highestProfit + self.entry_amount) * Wad.from_number(0.999999)
 
         #Print the highest profit/(loss) to see how close we come to breaking even
-        self.logger.info(f"Best trade regardless of profit/min-profit: {highestProfit} DAI from {self.start_exchange.name} to {self.end_exchange.name}")
+        self.logger.info(f"Best trade regardless of profit/min-profit: {highestProfit} {self.token_name(self.entry_token.address)} "
+                         f"from {self.start_exchange.name} to {self.end_exchange.name}")
 
         opportunity = highestProfit if highestProfit > self.min_profit else None
 
@@ -268,21 +272,22 @@ class SimpleArbitrageKeeper:
 
     def print_opportunity(self, opportunity: Wad):
         """Print the details of the opportunity."""
-        self.logger.info(f"Profit opportunity of {opportunity} DAI from {self.start_exchange.name} to {self.end_exchange.name}")
+        self.logger.info(f"Profit opportunity of {opportunity} {self.token_name(self.entry_token.address)} "
+                         f"from {self.start_exchange.name} to {self.end_exchange.name}")
 
 
     def execute_opportunity_in_one_transaction(self):
         """Execute the opportunity in one transaction, using the `tx_manager`."""
 
-        tokens = [self.sai.address, self.arb_token.address]
+        tokens = [self.entry_token.address, self.arb_token.address]
 
-        invocations = [self.start_exchange.make(pay_token=self.sai.address,
+        invocations = [self.start_exchange.make(pay_token=self.entry_token.address,
                                                pay_amount=self.entry_amount,
                                                buy_token=self.arb_token.address,
                                                buy_amount=self.arb_amount).invocation(),
                        self.end_exchange.make(pay_token=self.arb_token.address,
                                                pay_amount=self.arb_amount,
-                                               buy_token=self.sai.address,
+                                               buy_token=self.entry_token.address,
                                                buy_amount=self.exit_amount).invocation()]
 
         receipt = self.tx_manager.execute(tokens, invocations).transact(gas_price=self.gas_price(), gas_buffer=300000)

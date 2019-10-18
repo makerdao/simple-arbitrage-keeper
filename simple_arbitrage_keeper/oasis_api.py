@@ -13,11 +13,11 @@ class OasisAPI:
     logger = logging.getLogger()
     timeout = 15.5
 
-    def __init__(self, api_server: str, sai_name: str, arb_token_name: str):
+    def __init__(self, api_server: str, entry_token_name: str, arb_token_name: str):
         assert(isinstance(api_server, str))
 
 
-        self.sai_name = sai_name
+        self.entry_token_name = entry_token_name
         self.arb_token_name = arb_token_name
         self.api_server = api_server
 
@@ -30,7 +30,7 @@ class OasisAPI:
 
         """
 
-        response = requests.get(f"{self.api_server}/v2/orders/{self.arb_token_name}/{self.sai_name}", timeout=self.timeout)
+        response = requests.get(f"{self.api_server}/v2/orders/{self.arb_token_name}/{self.entry_token_name}", timeout=self.timeout)
         if not response.ok:
             raise Exception(f"Failed to fetch Oasis orders from REST API: {http_response_summary(response)}")
 
