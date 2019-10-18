@@ -74,13 +74,13 @@ optional arguments:
                         exchanges; checksummed (e.g. '0x12AebC')
   --arb-token-name ARB_TOKEN_NAME
                         The token name that arbitraged between both exchanges
-                        (e.g. 'DAI', 'WETH', 'MKR')
+                        (e.g. 'SAI', 'WETH', 'REP')
   --min-profit MIN_PROFIT
                         Ether amount of minimum profit (in base token) from
-                        one arbitrage operation (e.g. 1 for 1 Dai min profit)
+                        one arbitrage operation (e.g. 1 for 1 Sai min profit)
   --max-engagement MAX_ENGAGEMENT
                         Ether amount of maximum engagement (in base token) in
-                        one arbitrage operation (e.g. 100 for 100 Dai max
+                        one arbitrage operation (e.g. 100 for 100 Sai max
                         engagement)
   --max-errors MAX_ERRORS
                         Maximum number of allowed errors before the keeper
