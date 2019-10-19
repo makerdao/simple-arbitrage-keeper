@@ -24,10 +24,10 @@ class OasisAPI:
 
     def get_orders(self):
         """Returns active orders filtered by token pair
-        In order to get them, issues an `/v2/orders/XYZ/XYZ` call to the Oasis REST API
+        Issues an `/v2/orders/XYZ/XYZ` call to the Oasis REST API
 
-        Returns: List of bid elements [price (float), amount (float)] and ask elements [price (float), amounts (float)]
-
+        Returns:
+            Two lists: bid elements [price (float), amount (float)] and ask elements [price (float), amounts (float)]
         """
 
         response = requests.get(f"{self.api_server}/v2/orders/{self.arb_token_name}/{self.entry_token_name}", timeout=self.timeout)
@@ -42,7 +42,3 @@ class OasisAPI:
 
         else:
             return []
-
-
-    def __repr__(self):
-        return f"OasisAPI()"

@@ -45,6 +45,8 @@ class SimpleArbitrageKeeper:
     logger = logging.getLogger('simple-arbitrage-keeper')
 
     def __init__(self, args, **kwargs):
+        """Pass in arguements assign necessary variables/objects and instantiate other Classes"""
+
         parser = argparse.ArgumentParser("simple-arbitrage-keeper")
 
         parser.add_argument("--rpc-host", type=str, default="localhost",
@@ -149,17 +151,34 @@ class SimpleArbitrageKeeper:
         logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s',
                             level=(logging.DEBUG if self.arguments.debug else logging.INFO))
 
+
     def main(self):
+        """ Initialize the lifecycle and enter into the Keeper Lifecycle controller
+
+        Each function supplied by the lifecycle will accept a callback function that will be executed.
+        The lifecycle.on_block() function will enter into an infinite loop, but will gracefully shutdown
+        if it recieves a SIGINT/SIGTERM signal.
+
+        """
+
         with Lifecycle(self.web3) as lifecycle:
             self.lifecycle = lifecycle
             lifecycle.on_startup(self.startup)
             lifecycle.on_block(self.process_block)
 
+
     def startup(self):
         self.approve()
 
+
     def approve(self):
-        """Approve all components that need to access our balances"""
+        """ Approve all components that need to access our balances
+
+        Approve Oasis to access our tokens from our TxManager
+        Approve Uniswap exchanges to access our tokens that they swap from our TxManager
+        Approve TxManager to access our tokens from our ETH_FROM address
+
+        """
         approval_method = via_tx_manager(self.tx_manager, gas_price=self.gas_price()) if self.tx_manager \
             else directly(gas_price=self.gas_price())
 
@@ -181,7 +200,21 @@ class SimpleArbitrageKeeper:
         else:
             return str(address)
 
+
     def oasis_order_size(self, size: Wad = None):
+        """ Calculate the an oasis order buy size when buying/selling the arb_token
+
+        Query's the Oasis REST API and, if a `size` is not supplied, calculates a total amount of arb_token to be purchased.
+        However, if size is supplied, it will calculate the total amount of entry_token that is purchased
+
+        Args:
+            size: The size of the arb_token that will be sold
+
+        Returns:
+            A :py:class:`pymaker.numeric.Wad` instance of either a final entry_token amount to be bought
+            or a final arb_token amount to be bought
+        """
+
         if self.oasis_api_endpoint is None:
             return None
 
@@ -214,6 +247,19 @@ class SimpleArbitrageKeeper:
 
 
     def uniswap_order_size(self, size: Wad = None):
+        """ Calculate the an Uniswap buy size when buying/selling the arb_token
+
+        Reads the Uniswap entry, arb and eth exchange contracts, and if a `size` is not supplied,
+        calculates a total amount of arb_token to be purchased. However, if size is supplied,
+        it will calculate the total amount of entry_token that is purchased
+
+        Args:
+            size: The size of the arb_token that will be sold
+
+        Returns:
+            A :py:class:`pymaker.numeric.Wad` instance of either a final entry_token amount to be bought
+            or a final arb_token amount to be bought
+        """
         if size is None:
             ethAmt = self.uniswap_entry_exchange.uniswap_base.get_token_eth_input_price(self.entry_amount)
             arbAmt = self.uniswap_arb_exchange.uniswap_base.get_eth_token_input_price(ethAmt)
@@ -225,8 +271,7 @@ class SimpleArbitrageKeeper:
 
 
     def process_block(self):
-        """Callback called on each new block.
-        If too many errors, terminate the keeper to minimize potential damage."""
+        """Callback called on each new block. If too many errors, terminate the keeper to minimize potential damage."""
         if self.errors >= self.max_errors:
             self.lifecycle.terminate()
         else:
@@ -234,7 +279,16 @@ class SimpleArbitrageKeeper:
 
 
     def find_best_opportunity_available(self):
-        """Find the best arbitrage opportunity present and execute it."""
+        """Find the best arbitrage opportunity present and execute it.
+
+        With an entry_token of entry_amount, calculate the profitability of buying an arb_token
+        on Oasis and selling it on Uniswap. Calculate the profitability of the same operation
+        but starting on Uniswap. Depending on the comparison between these profitabilities,
+        assign the variables pertaining to start_exchange and end_exchange.
+
+        If the highestProfit is beyond the minimum profit as set by the user, print the opportunity
+        and attempt to execute it in one transaction
+        """
 
         self.entry_amount = Wad.min(self.entry_token.balance_of(self.our_address), self.max_engagement)
 
@@ -277,7 +331,12 @@ class SimpleArbitrageKeeper:
 
 
     def execute_opportunity_in_one_transaction(self):
-        """Execute the opportunity in one transaction, using the `tx_manager`."""
+        """Execute the opportunity in one transaction, using the `tx_manager`.
+
+        Sell entry_token and buy arb_token on start_exchange
+        Sell arb_token and buy entry_token on end_exchange
+
+        """
 
         tokens = [self.entry_token.address, self.arb_token.address]
 
@@ -299,6 +358,7 @@ class SimpleArbitrageKeeper:
 
 
     def gas_price(self):
+        """ FixedGasPrice if gas_price argument present, otherwise node DefaultGasPrice """
         if self.arguments.gas_price > 0:
             return FixedGasPrice(self.arguments.gas_price)
         else:
