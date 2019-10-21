@@ -74,7 +74,7 @@ class SimpleArbitrageKeeper:
                             help="Ethereum address of the OasisDEX contract; checksummed (e.g. '0x12AebC')")
 
         parser.add_argument("--oasis-api-endpoint", type=str, required=True,
-                            help="Address of the Oasis V2 REST API; checksummed (e.g. '0x12AebC')")
+                            help="Endpoint of of the Oasis V2 REST API (e.g. 'https://kovan-api.oasisdex.com' )")
 
         parser.add_argument("--relayer-per-page", type=int, default=100,
                             help="Number of orders to fetch per one page from the 0x Relayer API (default: 100)")

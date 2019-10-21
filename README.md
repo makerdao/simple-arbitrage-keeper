@@ -15,6 +15,20 @@ Provided that a `TxManager` is deployed and owned by the `ETH_FROM` address, thi
 
 Deployment steps and source code of the `TxManager` can be found here: [https://github.com/makerdao/tx-manager](https://github.com/makerdao/tx-manager).
 
+## Installation
+
+This project uses *Python 3.6.2*.
+
+In order to clone the project and install required third-party packages please execute:
+```
+git clone https://github.com/makerdao/arbitrage-keeper.git
+cd arbitrage-keeper
+git submodule update --init --recursive
+pip3 install -r requirements.txt
+```
+
+For some known Ubuntu and macOS issues see the [pymaker](https://github.com/makerdao/pymaker) README.
+
 ## Usage
 
 While in the `simple-arbitrage-keeper` directory, run the following command with required arguments:
@@ -55,8 +69,7 @@ optional arguments:
                         Ethereum address of the OasisDEX contract; checksummed
                         (e.g. '0x12AebC')
   --oasis-api-endpoint OASIS_API_ENDPOINT
-                        Address of the Oasis V2 REST API; checksummed (e.g.
-                        '0x12AebC')
+                        Endpoint of of the Oasis V2 REST API (e.g. 'https://kovan-api.oasisdex.com' )
   --relayer-per-page RELAYER_PER_PAGE
                         Number of orders to fetch per one page from the 0x
                         Relayer API (default: 100)
