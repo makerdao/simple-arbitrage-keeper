@@ -114,7 +114,7 @@ class SimpleArbitrageKeeper:
         register_keys(self.web3, self.arguments.eth_key)
         self.our_address = Address(self.arguments.eth_from)
 
-        self.sai = ERC20Token(web3=self.web3, address=Address('0xC4375B7De8af5a38a93548eb8453a498222C4fF2'))
+        self.sai = ERC20Token(web3=self.web3, address=Address('0xC4375B7De8af5a38a93548eb8453a498222C4fF2')) #Kovan Sai
 
         self.entry_token = ERC20Token(web3=self.web3, address=Address(self.arguments.entry_token))
         self.arb_token = ERC20Token(web3=self.web3, address=Address(self.arguments.arb_token))
