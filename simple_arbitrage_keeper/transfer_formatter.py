@@ -25,6 +25,7 @@ from pymaker.numeric import Wad
 
 
 class TransferFormatter:
+    """ When given a TxManager `receipt`, present all token transfers, in total or net """
     def _sum(self, wads):
         return reduce(Wad.__add__, wads, Wad.from_number(0))
 

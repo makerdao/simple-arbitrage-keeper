@@ -1,4 +1,0 @@
-#!/bin/sh
-dir="$(dirname "$0")"/..
-export PYTHONPATH=$PYTHONPATH:$dir:$dir/lib/pymaker
-exec python3 -m arbitrage_keeper.arbitrage_keeper $@
