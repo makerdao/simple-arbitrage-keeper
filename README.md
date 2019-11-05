@@ -6,7 +6,7 @@ This keeper constantly looks for profitable arbitrage opportunities within a tok
 
 It is simple in construction, utilizing the Oasis [REST Api](https://developer.makerdao.com/oasis/api/2/) and on-chain matching engine. It is also bounded by a single token pair and would increase its opportunity horizon and profitability if it evaluates all token pairs, overlapping across both exchanges.
 
-The `opportunity` is defined as the profit amount of the best arbitrage opporunity, which follows a simple call structure:
+The `opportunity` is defined as the profit amount of the best arbitrage opportunity, which follows a simple call structure:
 
 - Sell `entry_token` and buy `arb_token` on `start_exchange`
 - Sell `arb_token` and buy `entry_token` on `end_exchange`
@@ -21,8 +21,8 @@ This project uses *Python 3.6.2*.
 
 In order to clone the project and install required third-party packages please execute:
 ```
-git clone https://github.com/makerdao/arbitrage-keeper.git
-cd arbitrage-keeper
+git clone https://github.com/makerdao/simple-arbitrage-keeper.git
+cd simple-arbitrage-keeper
 git submodule update --init --recursive
 pip3 install -r requirements.txt
 ```
