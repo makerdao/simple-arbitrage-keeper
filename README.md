@@ -15,6 +15,8 @@ Provided that a `TxManager` is deployed and owned by the `ETH_FROM` address, thi
 
 Deployment steps and source code of the `TxManager` can be found here: [https://github.com/makerdao/tx-manager](https://github.com/makerdao/tx-manager).
 
+**We reccommend that first time users go through the [Simple Arbitrage Keeper guide](https://github.com/makerdao/developerguides/blob/master/keepers/simple-arbitrage-keeper/simple-arbitrage-keeper.md).**
+
 ## Installation
 
 This project uses *Python 3.6.2*.
