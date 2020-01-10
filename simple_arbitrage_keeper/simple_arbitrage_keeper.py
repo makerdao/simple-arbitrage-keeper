@@ -114,7 +114,11 @@ class SimpleArbitrageKeeper:
         register_keys(self.web3, self.arguments.eth_key)
         self.our_address = Address(self.arguments.eth_from)
 
-        self.sai = ERC20Token(web3=self.web3, address=Address('0xC4375B7De8af5a38a93548eb8453a498222C4fF2')) #Kovan Sai
+        self.sai = ERC20Token(web3=self.web3, address=Address('0x89d24a6b4ccb1b6faa2625fe562bdd9a23260359'))  # Mainnet Sai
+        self.dai = ERC20Token(web3=self.web3, address=Address('0x6b175474e89094c44da98b954eedeac495271d0f'))  # Mainnet Dai
+
+        self.ksai = ERC20Token(web3=self.web3, address=Address('0xC4375B7De8af5a38a93548eb8453a498222C4fF2')) #Kovan Sai
+        self.kdai = ERC20Token(web3=self.web3, address=Address('0x4F96Fe3b7A6Cf9725f59d353F723c1bDb64CA6Aa')) #Kovan Dai
 
         self.entry_token = ERC20Token(web3=self.web3, address=Address(self.arguments.entry_token))
         self.arb_token = ERC20Token(web3=self.web3, address=Address(self.arguments.arb_token))
@@ -195,7 +199,9 @@ class SimpleArbitrageKeeper:
 
 
     def token_name(self, address: Address) -> str:
-        if address == self.sai.address:
+        if address == self.ksai.address or address == self.sai.address:
+            return "SAI"
+        elif address == self.kdai.address or address == self.dai.address:
             return "DAI"
         else:
             return str(address)
