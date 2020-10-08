@@ -50,7 +50,7 @@ class SimpleArbitrageKeeper:
         parser = argparse.ArgumentParser("simple-arbitrage-keeper")
 
         parser.add_argument("--rpc-host", type=str, default="localhost",
-                            help="JSON-RPC host (default: `localhost')")
+                            help="JSON-RPC host (default: `localhost:8545')")
 
         parser.add_argument("--rpc-timeout", type=int, default=10,
                             help="JSON-RPC timeout (in seconds, default: 10)")
