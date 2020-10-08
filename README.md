@@ -117,7 +117,7 @@ In order to clone the project and install required third-party packages please e
 git clone https://github.com/makerdao/arbitrage-keeper.git
 cd arbitrage-keeper
 git submodule update --init --recursive
-pip3 install -r requirements.txt
+pip3 install -r lib/pymaker/requirements.txt
 ```
 
 For some known Ubuntu and macOS issues see the [pymaker](https://github.com/makerdao/pymaker) README.
