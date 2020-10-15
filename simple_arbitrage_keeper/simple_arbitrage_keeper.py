@@ -28,7 +28,7 @@ from simple_arbitrage_keeper.uniswap import UniswapWrapper
 from simple_arbitrage_keeper.oasis_api import OasisAPI
 from simple_arbitrage_keeper.transfer_formatter import TransferFormatter
 
-from pymaker import Address
+from pymaker import Address, web3_via_http
 from pymaker.approval import via_tx_manager, directly
 from pymaker.gas import DefaultGasPrice, FixedGasPrice
 from pymaker.keys import register_keys
@@ -50,10 +50,7 @@ class SimpleArbitrageKeeper:
         parser = argparse.ArgumentParser("simple-arbitrage-keeper")
 
         parser.add_argument("--rpc-host", type=str, default="localhost",
-                            help="JSON-RPC host (default: `localhost')")
-
-        parser.add_argument("--rpc-port", type=int, default=8545,
-                            help="JSON-RPC port (default: `8545')")
+                            help="JSON-RPC host (default: `localhost:8545')")
 
         parser.add_argument("--rpc-timeout", type=int, default=10,
                             help="JSON-RPC timeout (in seconds, default: 10)")
@@ -108,14 +105,15 @@ class SimpleArbitrageKeeper:
 
         self.arguments = parser.parse_args(args)
 
-        self.web3 = kwargs['web3'] if 'web3' in kwargs else Web3(HTTPProvider(endpoint_uri=f"https://{self.arguments.rpc_host}:{self.arguments.rpc_port}",
-                                                                              request_kwargs={"timeout": self.arguments.rpc_timeout}))
+        self.web3: Web3 = kwargs['web3'] if 'web3' in kwargs else web3_via_http(
+            endpoint_uri=self.arguments.rpc_host, timeout=self.arguments.rpc_timeout)
+
         self.web3.eth.defaultAccount = self.arguments.eth_from
         register_keys(self.web3, self.arguments.eth_key)
         self.our_address = Address(self.arguments.eth_from)
 
-        self.sai = ERC20Token(web3=self.web3, address=Address('0x89d24a6b4ccb1b6faa2625fe562bdd9a23260359'))  # Mainnet Sai
-        self.dai = ERC20Token(web3=self.web3, address=Address('0x6b175474e89094c44da98b954eedeac495271d0f'))  # Mainnet Dai
+        # self.sai = ERC20Token(web3=self.web3, address=Address('0x89d24a6b4ccb1b6faa2625fe562bdd9a23260359'))  # Mainnet Sai
+        # self.dai = ERC20Token(web3=self.web3, address=Address('0x6b175474e89094c44da98b954eedeac495271d0f'))  # Mainnet Dai
 
         self.ksai = ERC20Token(web3=self.web3, address=Address('0xC4375B7De8af5a38a93548eb8453a498222C4fF2')) #Kovan Sai
         self.kdai = ERC20Token(web3=self.web3, address=Address('0x4F96Fe3b7A6Cf9725f59d353F723c1bDb64CA6Aa')) #Kovan Dai
@@ -199,9 +197,9 @@ class SimpleArbitrageKeeper:
 
 
     def token_name(self, address: Address) -> str:
-        if address == self.ksai.address or address == self.sai.address:
+        if address == self.ksai.address:
             return "SAI"
-        elif address == self.kdai.address or address == self.dai.address:
+        if address == self.kdai.address:
             return "DAI"
         else:
             return str(address)

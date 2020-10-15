@@ -1,8 +1,10 @@
 # simple-arbitrage-keeper
 
+`NOTE`: This keeper is not complete. It uses pymaker and accidentally calls [`MatchingMarket.offer()`](https://github.com/makerdao/pymaker/blob/master/pymaker/oasis.py#L689), which isn't a guaranteed market buy (i.e. take order) in all permutations, so to improve this keeper, you'll need to call one of [OasisDex's Taker functions](https://oasisdex.com/docs/guides/market-taker).
+
 This keeper performs simple arbitrage between OasisDex and Uniswap. It's structure is inspired by the original [arbitrage-keeper](www.github.com/makerdao/arbitrage-keeper), which performs arbitrage on the smart contracts powering [Oasis.app](http://oasis.app), `join`, `exit`, `boom` and `bust` in Single Collateral Dai.
 
-This keeper constantly looks for profitable arbitrage opportunities within a token pair across OasisDex and Uniswap and attempts to execute them the moment they becomes available.
+This keeper constantly looks for profitable arbitrage opportunities within a token pair across OasisDex and Uniswap V1 and attempts to execute them the moment they becomes available.
 
 It is simple in construction, utilizing the Oasis [REST Api](https://developer.makerdao.com/oasis/api/2/) and on-chain matching engine. It is also bounded by a single token pair and would increase its opportunity horizon and profitability if it evaluates all token pairs, overlapping across both exchanges.
 
@@ -19,14 +21,14 @@ Deployment steps and source code of the `TxManager` can be found here: [https://
 
 ## Installation
 
-This project uses *Python 3.6.2*.
+This project uses the python version in [pymaker](https://github.com/makerdao/pymaker#installation).
 
 In order to clone the project and install required third-party packages please execute:
 ```
 git clone https://github.com/makerdao/simple-arbitrage-keeper.git
 cd simple-arbitrage-keeper
 git submodule update --init --recursive
-pip3 install -r requirements.txt
+pip3 install -r lib/pymaker/requirements.txt
 ```
 
 For some known Ubuntu and macOS issues see the [pymaker](https://github.com/makerdao/pymaker) README.
@@ -104,23 +106,28 @@ optional arguments:
 
 ```
 
+Here's an example script to easily spin up the keeper for Kovan, entry token `DAI`, and arb token `WETH`:
+```
+#!/bin/bash
+/path/to/simple-arbitrage-keeper/bin/simple-arbitrage-keeper \
+	--rpc-host 'https://parity.node:8545' \
+	--eth-from '0xABC123' \
+	--eth-key 'key_file=/path/to/keystore.txt,pass_file=/path/to/passphraseFile.txt' \
+	--uniswap-entry-exchange '0x47D4Af3BBaEC0dE4dba5F44ae8Ed2761977D32d6' \
+	--uniswap-arb-exchange '0x1D79BcC198281C5F9B52bf24F671437BaDd3a688' \
+	--oasis-address '0x4A6bC4e803c62081ffEbCc8d227B5a87a58f1F8F' \
+	--oasis-api-endpoint 'https://kovan-api.oasisdex.com' \
+	--tx-manager '0xABC123' \
+	--entry-token '0x4F96Fe3b7A6Cf9725f59d353F723c1bDb64CA6Aa' \
+	--arb-token '0xd0A1E359811322d97991E03f863a0C30C2cF029C' \
+	--arb-token-name 'WETH' \
+	--min-profit 1 \
+	--max-engagement 10 \
+```
+
 ## License
 
 See [COPYING](https://github.com/makerdao/simple-arbitrage-keeper/blob/master/COPYING) file.
-
-## Installation
-
-This project uses *Python 3.6.2*.
-
-In order to clone the project and install required third-party packages please execute:
-```
-git clone https://github.com/makerdao/arbitrage-keeper.git
-cd arbitrage-keeper
-git submodule update --init --recursive
-pip3 install -r requirements.txt
-```
-
-For some known Ubuntu and macOS issues see the [pymaker](https://github.com/makerdao/pymaker) README.
 
 
 ### Disclaimer
