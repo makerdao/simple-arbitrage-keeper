@@ -199,7 +199,7 @@ class SimpleArbitrageKeeper:
     def token_name(self, address: Address) -> str:
         if address == self.ksai.address:
             return "SAI"
-        elif address == self.kdai.address:
+        if address == self.kdai.address:
             return "DAI"
         else:
             return str(address)
