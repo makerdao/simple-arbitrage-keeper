@@ -28,6 +28,8 @@ In order to clone the project and install required third-party packages please e
 git clone https://github.com/makerdao/simple-arbitrage-keeper.git
 cd simple-arbitrage-keeper
 git submodule update --init --recursive
+virtualenv env
+source env/bin/activate
 pip3 install -r lib/pymaker/requirements.txt
 ```
 
